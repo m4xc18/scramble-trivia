@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScrambleQuiz</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0d; --surface: #161616; --card: #1e1e1e;
+    --accent: #c8f04d; --accent2: #ff6b35; --accent3: #7eb8f7;
+    --text: #f0f0f0; --muted: #555; --border: #2a2a2a;
+    --correct: #4ddb8a; --wrong: #ff4d6d;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:var(--bg); color:var(--text); font-family:'Syne',sans-serif;
+    min-height:100vh; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:20px; overflow-x:hidden;
+  }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 10%,rgba(200,240,77,0.06) 0%,transparent 60%),
+      radial-gradient(ellipse 40% 50% at 10% 80%,rgba(126,184,247,0.05) 0%,transparent 60%);
+    pointer-events:none;
+  }
+  .mute-btn {
+    position:fixed; top:16px; right:16px; width:38px; height:38px;
+    background:var(--surface); border:1px solid var(--border); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:1.1rem; transition:all 0.15s; z-index:200; user-select:none;
+  }
+  .mute-btn:hover { border-color:var(--accent); transform:scale(1.1); }
+  .header { text-align:center; margin-bottom:32px; animation:fadeDown 0.6s ease; }
+  .logo { font-size:clamp(2rem,5vw,3.2rem); font-weight:800; letter-spacing:-1px; line-height:1; }
+  .logo span:first-child { color:var(--accent); }
+  .tagline { font-family:'DM Mono',monospace; font-size:0.75rem; color:var(--muted); margin-top:6px; letter-spacing:2px; text-transform:uppercase; }
+
+  /* SCREENS */
+  .screen { width:100%; max-width:580px; display:none; }
+  .screen.active { display:block; animation:fadeUp 0.4s ease; }
+
+  /* CATEGORY SCREEN */
+  .section-label { font-family:'DM Mono',monospace; font-size:0.65rem; letter-spacing:2px; color:var(--muted); text-transform:uppercase; margin-bottom:14px; }
+  .cat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
+  @media(max-width:480px) { .cat-grid { grid-template-columns:repeat(2,1fr); } }
+  .cat-card {
+    background:var(--card); border:2px solid var(--border); border-radius:14px;
+    padding:16px 12px; cursor:pointer; transition:all 0.18s; position:relative;
+    overflow:hidden; user-select:none; animation:catIn 0.35s ease both;
+  }
+  .cat-card::after {
+    content:''; position:absolute; inset:0; border-radius:12px;
+    background:var(--cat-color,var(--accent)); opacity:0; transition:opacity 0.2s;
+  }
+  .cat-card:hover { transform:translateY(-2px); border-color:var(--cat-color,var(--accent)); }
+  .cat-card.selected { border-color:var(--cat-color,var(--accent)); }
+  .cat-card.selected::after { opacity:0.08; }
+  .cat-card.selected .cat-check { opacity:1; transform:scale(1); }
+  .cat-icon { font-size:1.6rem; margin-bottom:7px; display:block; position:relative; z-index:1; }
+  .cat-name { font-size:0.88rem; font-weight:800; color:var(--text); margin-bottom:3px; position:relative; z-index:1; }
+  .cat-desc { font-family:'DM Mono',monospace; font-size:0.6rem; color:var(--muted); line-height:1.4; position:relative; z-index:1; }
+  .cat-check {
+    position:absolute; top:10px; right:10px; width:20px; height:20px;
+    background:var(--cat-color,var(--accent)); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.65rem; color:#0d0d0d; font-weight:800; z-index:1;
+    opacity:0; transform:scale(0.4); transition:all 0.22s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .cat-card:nth-child(1){animation-delay:0.04s} .cat-card:nth-child(2){animation-delay:0.08s}
+  .cat-card:nth-child(3){animation-delay:0.12s} .cat-card:nth-child(4){animation-delay:0.16s}
+  .cat-card:nth-child(5){animation-delay:0.20s} .cat-card:nth-child(6){animation-delay:0.24s}
+
+  .top-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .select-all-btn { font-family:'DM Mono',monospace; font-size:0.68rem; color:var(--muted); cursor:pointer; text-decoration:underline; text-underline-offset:3px; transition:color 0.15s; background:none; border:none; }
+  .select-all-btn:hover { color:var(--accent); }
+
+  .diff-row { display:flex; gap:8px; margin-bottom:24px; }
+  .diff-btn {
+    flex:1; background:var(--surface); border:1.5px solid var(--border);
+    border-radius:10px; padding:10px 6px; cursor:pointer;
+    font-family:'Syne',sans-serif; font-weight:700; font-size:0.78rem;
+    color:var(--muted); transition:all 0.15s; text-align:center; line-height:1.3;
+  }
+  .diff-btn:hover { border-color:var(--muted); color:var(--text); }
+  .diff-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(200,240,77,0.06); }
+  .diff-icon { font-size:1rem; display:block; margin-bottom:3px; }
+
+  .cat-footer { display:flex; gap:12px; align-items:center; margin-top:4px; }
+  .selected-summary { font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--muted); flex:1; }
+  .selected-summary span { color:var(--accent); font-weight:700; }
+
+  /* SCORE BAR */
+  .score-bar { display:flex; gap:16px; justify-content:center; margin-bottom:20px; }
+  .score-pill {
+    background:var(--surface); border:1px solid var(--border); border-radius:40px;
+    padding:7px 20px; display:flex; flex-direction:column; align-items:center; gap:2px;
+  }
+  .score-pill .label { font-family:'DM Mono',monospace; font-size:0.58rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; }
+  .score-pill .value { font-size:1.4rem; font-weight:800; color:var(--accent); transition:transform 0.3s,color 0.3s; }
+  .score-pill .value.pop { transform:scale(1.4); color:var(--correct); }
+
+  .active-cats-bar { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:14px; }
+  .active-cat-pill { font-family:'DM Mono',monospace; font-size:0.58rem; letter-spacing:1.5px; text-transform:uppercase; padding:3px 9px; border-radius:20px; border:1px solid; }
+
+  /* GAME CARD */
+  .game-card { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:32px; width:100%; position:relative; }
+  .round-badge { font-family:'DM Mono',monospace; font-size:0.62rem; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; }
+  .word-cat-tag { font-size:0.58rem; padding:2px 8px; border-radius:20px; border:1px solid; font-family:'DM Mono',monospace; letter-spacing:1px; }
+  .hint-text { font-size:0.85rem; color:var(--accent3); margin-bottom:10px; min-height:22px; font-weight:700; }
+  .scrambled-display { display:flex; gap:7px; flex-wrap:wrap; justify-content:center; margin:18px 0 24px; }
+  .letter-tile {
+    width:50px; height:58px; background:var(--surface); border:2px solid var(--border);
+    border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-family:'DM Mono',monospace; font-size:1.35rem; font-weight:500; color:var(--text);
+    cursor:pointer; transition:all 0.15s; user-select:none;
+  }
+  .letter-tile:hover:not(.used) { border-color:var(--accent); color:var(--accent); transform:translateY(-3px); box-shadow:0 6px 20px rgba(200,240,77,0.2); }
+  .letter-tile.used { opacity:0.22; cursor:default; transform:none; }
+  .letter-tile.shake { animation:shake 0.4s ease; }
+  .answer-row { display:flex; gap:7px; flex-wrap:wrap; justify-content:center; margin-bottom:22px; min-height:58px; }
+  .answer-slot {
+    width:50px; height:58px; border-bottom:3px solid var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'DM Mono',monospace; font-size:1.35rem; font-weight:500;
+    color:var(--accent); cursor:pointer; transition:all 0.15s; border-radius:6px 6px 0 0;
+  }
+  .answer-slot:hover:not(:empty) { background:rgba(200,240,77,0.08); }
+  .answer-slot.correct-flash { border-color:var(--correct); color:var(--correct); animation:correctPop 0.5s ease; }
+  .btn-row { display:flex; gap:10px; justify-content:center; }
+  .btn { font-family:'Syne',sans-serif; font-weight:700; font-size:0.85rem; letter-spacing:0.5px; padding:12px 24px; border-radius:10px; border:none; cursor:pointer; transition:all 0.15s; }
+  .btn-primary { background:var(--accent); color:#0d0d0d; }
+  .btn-primary:hover { filter:brightness(1.1); transform:translateY(-1px); }
+  .btn-primary:active { transform:translateY(0); }
+  .btn-primary:disabled { opacity:0.4; cursor:not-allowed; transform:none; filter:none; }
+  .btn-ghost { background:transparent; color:var(--muted); border:1px solid var(--border); }
+  .btn-ghost:hover { border-color:var(--muted); color:var(--text); }
+  .btn-lg { padding:14px 36px; font-size:1rem; }
+  .status-msg { text-align:center; font-size:0.82rem; font-family:'DM Mono',monospace; margin-top:14px; min-height:20px; color:var(--muted); transition:color 0.3s; }
+  .status-msg.good { color:var(--correct); }
+  .status-msg.bad { color:var(--wrong); }
+  .progress-bar { height:3px; background:var(--border); border-radius:3px; margin-bottom:24px; overflow:hidden; }
+  .progress-fill { height:100%; background:var(--accent); border-radius:3px; transition:width 0.5s ease; }
+
+  /* TRIVIA */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px; backdrop-filter:blur(6px); opacity:0; pointer-events:none; transition:opacity 0.3s; }
+  .overlay.active { opacity:1; pointer-events:all; }
+  .trivia-card { background:var(--card); border:1px solid var(--accent); border-radius:20px; padding:32px; max-width:480px; width:100%; transform:scale(0.92) translateY(20px); transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1); box-shadow:0 0 60px rgba(200,240,77,0.15); max-height:90vh; overflow-y:auto; }
+  .overlay.active .trivia-card { transform:scale(1) translateY(0); }
+  .trivia-header { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .trivia-icon { width:36px; height:36px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; color:#0d0d0d; }
+  .trivia-label { font-family:'DM Mono',monospace; font-size:0.62rem; letter-spacing:2px; color:var(--accent); text-transform:uppercase; }
+  .trivia-sub { font-size:0.73rem; color:var(--muted); margin-top:2px; }
+  .trivia-cat-tag { display:inline-block; font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:1.5px; text-transform:uppercase; padding:3px 10px; border-radius:20px; margin-bottom:14px; }
+  .trivia-q { font-size:1.05rem; font-weight:700; line-height:1.5; margin-bottom:20px; color:var(--text); }
+  .trivia-options { display:flex; flex-direction:column; gap:9px; margin-bottom:18px; }
+  .trivia-option { background:var(--surface); border:1.5px solid var(--border); border-radius:12px; padding:13px 16px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.88rem; color:var(--text); text-align:left; transition:all 0.15s; }
+  .trivia-option:hover:not(.locked) { border-color:var(--accent); color:var(--accent); background:rgba(200,240,77,0.05); }
+  .trivia-option.selected-correct { border-color:var(--correct); background:rgba(77,219,138,0.12); color:var(--correct); }
+  .trivia-option.selected-wrong { border-color:var(--wrong); background:rgba(255,77,109,0.12); color:var(--wrong); }
+  .trivia-option.reveal-correct { border-color:var(--correct); background:rgba(77,219,138,0.08); color:var(--correct); }
+  .trivia-option.locked { cursor:default; }
+  .trivia-feedback { font-size:0.83rem; line-height:1.5; color:var(--muted); padding:12px 16px; background:var(--surface); border-radius:10px; border-left:3px solid transparent; margin-bottom:14px; display:none; }
+  .trivia-feedback.show { display:block; }
+  .trivia-feedback.correct-fb { border-left-color:var(--correct); color:var(--text); }
+  .trivia-feedback.wrong-fb { border-left-color:var(--wrong); color:var(--text); }
+  .trivia-continue { width:100%; padding:13px; font-size:0.93rem; display:none; }
+  .trivia-continue.show { display:block; }
+  .timer-ring { width:38px; height:38px; position:relative; flex-shrink:0; }
+  .timer-ring svg { transform:rotate(-90deg); }
+  .timer-ring .track { fill:none; stroke:var(--border); stroke-width:3; }
+  .timer-ring .fill { fill:none; stroke:var(--accent2); stroke-width:3; stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:0; transition:stroke-dashoffset 1s linear,stroke 0.3s; }
+  .timer-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'DM Mono',monospace; font-size:0.72rem; font-weight:500; color:var(--text); }
+
+  /* CONGRATS */
+  .congrats-screen { text-align:center; display:none; }
+  .congrats-screen.active { display:block; animation:fadeUp 0.5s ease; }
+  .congrats-emoji { font-size:4rem; margin-bottom:16px; display:block; animation:bounce 1s infinite alternate; }
+  .congrats-title { font-size:2.2rem; font-weight:800; color:var(--accent); margin-bottom:8px; }
+  .congrats-sub { color:var(--muted); font-size:0.9rem; margin-bottom:20px; font-family:'DM Mono',monospace; }
+  .final-score { font-size:3.5rem; font-weight:800; color:var(--text); margin:16px 0; }
+  .end-btn-row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+
+  /* ANIMATIONS */
+  @keyframes fadeDown { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+  @keyframes correctPop { 0%{transform:scale(1)} 50%{transform:scale(1.15)} 100%{transform:scale(1)} }
+  @keyframes bounce { from{transform:translateY(0)} to{transform:translateY(-10px)} }
+  @keyframes catIn { from{opacity:0;transform:scale(0.93) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+</style>
+</head>
+<body>
+
+<div class="mute-btn" id="muteBtn" onclick="toggleMute()" title="Toggle sound">🔊</div>
+
+<div class="header">
+  <div class="logo"><span>SCRAMBLE</span><span>QUIZ</span></div>
+  <div class="tagline">Unscramble to play · Answer to score</div>
+</div>
+
+<!-- ══ CATEGORY SCREEN ══ -->
+<div class="screen active" id="catScreen">
+  <div class="top-row">
+    <div class="section-label" style="margin-bottom:0">Pick your categories</div>
+    <button class="select-all-btn" id="selectAllBtn" onclick="toggleSelectAll()">Select all</button>
+  </div>
+  <div class="cat-grid" id="catGrid"></div>
+
+  <div class="section-label" style="margin-bottom:10px">Difficulty</div>
+  <div class="diff-row">
+    <button class="diff-btn active" data-diff="easy" onclick="setDiff('easy')"><span class="diff-icon">🌱</span>Easy<br><span style="font-size:0.6rem;color:var(--muted);font-weight:400">5–6 letters</span></button>
+    <button class="diff-btn" data-diff="medium" onclick="setDiff('medium')"><span class="diff-icon">🔥</span>Medium<br><span style="font-size:0.6rem;color:var(--muted);font-weight:400">6–7 letters</span></button>
+    <button class="diff-btn" data-diff="hard" onclick="setDiff('hard')"><span class="diff-icon">💀</span>Hard<br><span style="font-size:0.6rem;color:var(--muted);font-weight:400">7+ letters</span></button>
+    <button class="diff-btn" data-diff="all" onclick="setDiff('all')"><span class="diff-icon">🎲</span>Mixed<br><span style="font-size:0.6rem;color:var(--muted);font-weight:400">Any length</span></button>
+  </div>
+
+  <div class="cat-footer">
+    <div class="selected-summary" id="selectedSummary">Select at least 1 category</div>
+    <button class="btn btn-primary btn-lg" id="startBtn" onclick="startGame()" disabled>Start Game →</button>
+  </div>
+</div>
+
+<!-- ══ GAME SCREEN ══ -->
+<div class="screen" id="gameScreen">
+  <div class="score-bar">
+    <div class="score-pill"><span class="label">Score</span><span class="value" id="scoreVal">0</span></div>
+    <div class="score-pill"><span class="label">Streak</span><span class="value" id="streakVal" style="color:var(--accent2)">0</span></div>
+    <div class="score-pill"><span class="label">Word</span><span class="value" id="wordVal" style="color:var(--accent3)">1<span style="font-size:0.85rem;font-weight:400">/8</span></span></div>
+  </div>
+  <div class="active-cats-bar" id="activeCatsBar"></div>
+  <div class="game-card">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="round-badge">
+      <span id="roundBadge">ROUND 1 OF 8</span>
+      <span class="word-cat-tag" id="wordCatTag"></span>
+    </div>
+    <div class="hint-text" id="hintText">Loading...</div>
+    <div class="scrambled-display" id="scrambledDisplay"></div>
+    <div class="answer-row" id="answerRow"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="clearAnswer()">Clear</button>
+      <button class="btn btn-ghost" onclick="skipWord()">Skip</button>
+      <button class="btn btn-primary" onclick="checkAnswer()">Submit ↵</button>
+    </div>
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+</div>
+
+<!-- ══ CONGRATS SCREEN ══ -->
+<div class="congrats-screen" id="congratsScreen">
+  <span class="congrats-emoji">🎉</span>
+  <div class="congrats-title">You Crushed It!</div>
+  <div class="congrats-sub">Final Results</div>
+  <div class="final-score" id="finalScore">0 pts</div>
+  <div style="color:var(--muted);font-size:0.85rem;margin-bottom:28px;" id="finalStats"></div>
+  <div class="end-btn-row">
+    <button class="btn btn-ghost" style="padding:14px 24px;" onclick="showCatScreen()">← Change Category</button>
+    <button class="btn btn-primary btn-lg" onclick="restartGame()">Play Again</button>
+  </div>
+</div>
+
+<!-- ══ TRIVIA OVERLAY ══ -->
+<div class="overlay" id="triviaOverlay">
+  <div class="trivia-card">
+    <div class="trivia-header">
+      <div class="trivia-icon">🧠</div>
+      <div>
+        <div class="trivia-label">Knowledge Gate</div>
+        <div class="trivia-sub">Answer correctly to bank your points!</div>
+      </div>
+      <div class="timer-ring" style="margin-left:auto">
+        <svg width="38" height="38" viewBox="0 0 38 38">
+          <circle class="track" cx="19" cy="19" r="15.9"/>
+          <circle class="fill" id="timerFill" cx="19" cy="19" r="15.9"/>
+        </svg>
+        <div class="timer-text" id="timerText">20</div>
+      </div>
+    </div>
+    <div class="trivia-cat-tag" id="triviaCategory"></div>
+    <div class="trivia-q" id="triviaQuestion"></div>
+    <div class="trivia-options" id="triviaOptions"></div>
+    <div class="trivia-feedback" id="triviaFeedback"></div>
+    <button class="btn btn-primary trivia-continue" id="triviaBtn" onclick="closeTriviaAndScore()">Continue →</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════
+const CATEGORIES = {
+  science: {
+    label:"Science", icon:"🔬", color:"#7eb8f7", desc:"Biology, chemistry, physics",
+    words:[
+      {word:"PHOTON",  hint:"A particle of light",                   diff:"easy"},
+      {word:"ENZYME",  hint:"A biological catalyst",                  diff:"easy"},
+      {word:"NEURON",  hint:"A nerve cell in the brain",              diff:"easy"},
+      {word:"PLASMA",  hint:"Fourth state of matter",                 diff:"easy"},
+      {word:"OSMOSIS", hint:"Water moving across a membrane",         diff:"medium"},
+      {word:"MITOSIS", hint:"Cell division process",                  diff:"medium"},
+      {word:"NUCLEUS", hint:"Center of an atom or cell",              diff:"medium"},
+      {word:"FRACTAL", hint:"Self-similar mathematical pattern",      diff:"medium"},
+      {word:"ELECTRON",hint:"Negatively charged subatomic particle",  diff:"hard"},
+      {word:"CATALYST",hint:"Speeds up a chemical reaction",          diff:"hard"},
+      {word:"PROTEIN", hint:"Large biological molecule",              diff:"medium"},
+      {word:"GRAVITY", hint:"Force of attraction between masses",     diff:"medium"},
+    ],
+    trivia:[
+      {question:"Which organelle is the 'powerhouse of the cell'?",options:["Ribosome","Nucleus","Mitochondria","Golgi Apparatus"],correct:2,fact:"Mitochondria produce ATP through cellular respiration, powering nearly all cell functions."},
+      {question:"What is the speed of light in a vacuum (approx)?",options:["300,000 km/s","150,000 km/s","3,000 km/s","30,000 km/s"],correct:0,fact:"Light travels at 299,792,458 m/s in a vacuum — the universal speed limit!"},
+      {question:"What is H₂O more commonly known as?",options:["Hydrogen gas","Water","Hydrogen peroxide","Ozone"],correct:1,fact:"H₂O is water — two hydrogen atoms covalently bonded to one oxygen atom."},
+      {question:"What is the chemical symbol for gold?",options:["Gd","Go","Au","Ag"],correct:2,fact:"Au comes from 'Aurum,' the Latin word for gold."},
+      {question:"What force keeps planets in orbit around the Sun?",options:["Magnetism","Electrostatics","Gravity","Nuclear force"],correct:2,fact:"Gravity curves spacetime — planets fall around the Sun in what we experience as orbits."},
+      {question:"How many bones does an adult human body have?",options:["186","206","216","226"],correct:1,fact:"Babies are born with ~270 bones; many fuse during growth, leaving 206 in adults."},
+      {question:"What gas do plants absorb during photosynthesis?",options:["Oxygen","Nitrogen","Carbon dioxide","Hydrogen"],correct:2,fact:"Plants use CO₂ + water + light to produce glucose and oxygen via photosynthesis."},
+      {question:"What is the atomic number of carbon?",options:["4","6","8","12"],correct:1,fact:"Carbon (C) has 6 protons, making it atomic number 6 — the basis of all organic life."},
+    ]
+  },
+  geography: {
+    label:"Geography", icon:"🌍", color:"#4ddb8a", desc:"Countries, capitals, landforms",
+    words:[
+      {word:"DELTA",  hint:"River mouth landform",                   diff:"easy"},
+      {word:"TUNDRA", hint:"Cold treeless biome",                    diff:"easy"},
+      {word:"CANYON", hint:"Deep gorge carved by a river",           diff:"easy"},
+      {word:"LAGOON", hint:"Shallow body of coastal water",          diff:"easy"},
+      {word:"PLATEAU",hint:"Elevated flat-topped land",              diff:"medium"},
+      {word:"VOLCANO",hint:"A geological eruption vent",             diff:"medium"},
+      {word:"ISTHMUS",hint:"Narrow land strip connecting two areas", diff:"medium"},
+      {word:"EQUATOR",hint:"Imaginary line at 0° latitude",          diff:"medium"},
+      {word:"MERIDIAN",hint:"North-south line of longitude",         diff:"hard"},
+    ],
+    trivia:[
+      {question:"Which is the largest ocean on Earth?",options:["Atlantic","Indian","Pacific","Arctic"],correct:2,fact:"The Pacific Ocean covers about 165 million km² — larger than all land masses combined!"},
+      {question:"What is the capital city of Australia?",options:["Sydney","Melbourne","Canberra","Brisbane"],correct:2,fact:"Canberra has been Australia's capital since 1913 — chosen as a compromise between Sydney and Melbourne."},
+      {question:"Which country has the most natural lakes?",options:["Russia","USA","Brazil","Canada"],correct:3,fact:"Canada has over 60% of the world's natural lakes — roughly 879,800 of them!"},
+      {question:"What is the longest river in the world?",options:["Amazon","Nile","Yangtze","Mississippi"],correct:1,fact:"The Nile stretches ~6,650 km through northeastern Africa."},
+      {question:"Which continent is the driest on Earth?",options:["Africa","Australia","Antarctica","Asia"],correct:2,fact:"Antarctica is technically a desert — it receives less than 200mm of precipitation per year."},
+      {question:"What is the smallest country in the world?",options:["Monaco","Liechtenstein","Vatican City","San Marino"],correct:2,fact:"Vatican City covers just 0.44 km² and is home to the Pope and the Catholic Church headquarters."},
+      {question:"How many countries are in Africa?",options:["44","54","64","74"],correct:1,fact:"Africa has 54 recognized sovereign states, making it the continent with the most countries."},
+    ]
+  },
+  history: {
+    label:"History", icon:"🏛️", color:"#ff6b35", desc:"Events, eras, civilisations",
+    words:[
+      {word:"EMPIRE",  hint:"A large domain under one ruler",          diff:"easy"},
+      {word:"TREATY",  hint:"Formal agreement between nations",        diff:"easy"},
+      {word:"SENATE",  hint:"Governing body of ancient Rome",          diff:"easy"},
+      {word:"FEUDAL",  hint:"Medieval land-ownership system",          diff:"medium"},
+      {word:"DYNASTY", hint:"Succession of rulers from one family",    diff:"medium"},
+      {word:"CRUSADE", hint:"Medieval religious military campaign",    diff:"medium"},
+      {word:"PHARAOH", hint:"Ancient Egyptian ruler",                  diff:"medium"},
+      {word:"REPUBLIC",hint:"Government by elected representatives",   diff:"hard"},
+    ],
+    trivia:[
+      {question:"In which year did World War II end?",options:["1943","1944","1945","1946"],correct:2,fact:"WWII ended in 1945 — VE Day (May 8) in Europe, VJ Day (Sept 2) in the Pacific."},
+      {question:"Who was the first person to walk on the Moon?",options:["Buzz Aldrin","Yuri Gagarin","Neil Armstrong","John Glenn"],correct:2,fact:"Neil Armstrong stepped onto the lunar surface on July 20, 1969 during Apollo 11."},
+      {question:"Which ancient wonder was located in Egypt?",options:["Hanging Gardens","Colossus of Rhodes","Great Pyramid of Giza","Temple of Artemis"],correct:2,fact:"The Great Pyramid of Giza is the only ancient wonder still largely intact today."},
+      {question:"In what year did the Berlin Wall fall?",options:["1987","1988","1989","1991"],correct:2,fact:"The Berlin Wall fell on November 9, 1989, marking the end of the Cold War division of Germany."},
+      {question:"Which empire was the largest in history by land area?",options:["Roman Empire","British Empire","Mongol Empire","Ottoman Empire"],correct:1,fact:"The British Empire at its peak covered ~24% of Earth's total land area."},
+      {question:"Who wrote the Declaration of Independence?",options:["George Washington","Benjamin Franklin","Thomas Jefferson","John Adams"],correct:2,fact:"Thomas Jefferson was the principal author, drafted in June 1776."},
+      {question:"The French Revolution began in which year?",options:["1776","1783","1789","1799"],correct:2,fact:"The French Revolution began in 1789 with the storming of the Bastille on July 14."},
+    ]
+  },
+  math: {
+    label:"Math", icon:"📐", color:"#c8f04d", desc:"Numbers, shapes, logic",
+    words:[
+      {word:"PRIME",   hint:"Only divisible by 1 and itself",          diff:"easy"},
+      {word:"RATIO",   hint:"Comparison between two quantities",       diff:"easy"},
+      {word:"VECTOR",  hint:"Quantity with magnitude and direction",   diff:"medium"},
+      {word:"MATRIX",  hint:"Rectangular array of numbers",           diff:"medium"},
+      {word:"THEOREM", hint:"A proven mathematical statement",         diff:"medium"},
+      {word:"POLYGON", hint:"Closed shape with straight sides",        diff:"medium"},
+      {word:"INTEGER", hint:"Whole number, positive or negative",      diff:"medium"},
+      {word:"CALCULUS",hint:"Branch of math: derivatives & integrals", diff:"hard"},
+      {word:"EXPONENT",hint:"Power to which a number is raised",       diff:"hard"},
+    ],
+    trivia:[
+      {question:"What is the value of π (pi) to two decimal places?",options:["3.12","3.14","3.16","3.18"],correct:1,fact:"Pi (π) ≈ 3.14159... It's the ratio of a circle's circumference to its diameter."},
+      {question:"What is 2 to the power of 10?",options:["512","1024","2048","256"],correct:1,fact:"2¹⁰ = 1,024 — that's also why a 'kilobyte' in computing = 1,024 bytes!"},
+      {question:"What is the sum of angles in a triangle?",options:["90°","180°","270°","360°"],correct:1,fact:"The interior angles of any triangle always add up to exactly 180 degrees."},
+      {question:"What is the square root of 144?",options:["11","12","13","14"],correct:1,fact:"12 × 12 = 144. The square root of 144 is 12."},
+      {question:"How many sides does a hexagon have?",options:["5","6","7","8"],correct:1,fact:"Hex- means six in Greek. A hexagon has 6 sides and 6 angles."},
+      {question:"What is 15% of 200?",options:["25","30","35","40"],correct:1,fact:"15% of 200 = 0.15 × 200 = 30."},
+      {question:"Which of these is a prime number?",options:["21","27","29","33"],correct:2,fact:"29 is prime — divisible only by 1 and 29. The others are divisible by 3 or 7."},
+    ]
+  },
+  astronomy: {
+    label:"Astronomy", icon:"🚀", color:"#b97bff", desc:"Space, stars, planets",
+    words:[
+      {word:"COMET",   hint:"Icy body with a glowing tail",            diff:"easy"},
+      {word:"QUASAR",  hint:"Extremely luminous active galaxy core",   diff:"easy"},
+      {word:"NEBULA",  hint:"Cloud of gas and dust in space",          diff:"easy"},
+      {word:"PULSAR",  hint:"Rapidly rotating neutron star",           diff:"easy"},
+      {word:"ECLIPSE", hint:"One body passing into another's shadow",  diff:"medium"},
+      {word:"SOLSTICE",hint:"When the Sun reaches its highest point",  diff:"medium"},
+      {word:"ASTEROID",hint:"Rocky body orbiting the Sun",             diff:"hard"},
+      {word:"SUPERNOVA",hint:"Massive stellar explosion",              diff:"hard"},
+    ],
+    trivia:[
+      {question:"How long does sunlight take to reach Earth?",options:["About 8 minutes","About 8 hours","About 8 seconds","About 8 days"],correct:0,fact:"Sunlight travels ~150 million km at 299,792 km/s — arriving in roughly 8 minutes 20 seconds."},
+      {question:"What is the closest star to Earth besides the Sun?",options:["Sirius","Betelgeuse","Proxima Centauri","Vega"],correct:2,fact:"Proxima Centauri is ~4.24 light-years away — part of the Alpha Centauri system."},
+      {question:"Which planet has the most moons?",options:["Jupiter","Saturn","Uranus","Neptune"],correct:1,fact:"Saturn leads with 146 confirmed moons as of 2024, overtaking Jupiter's 95."},
+      {question:"What is the name of our galaxy?",options:["Andromeda","Triangulum","Milky Way","Sombrero"],correct:2,fact:"We live in the Milky Way galaxy, a barred spiral galaxy about 100,000 light-years across."},
+      {question:"Which planet is known as the Red Planet?",options:["Venus","Jupiter","Saturn","Mars"],correct:3,fact:"Mars appears red because its surface is covered in iron oxide (rust)."},
+      {question:"What is a light-year a measure of?",options:["Time","Speed","Distance","Brightness"],correct:2,fact:"A light-year is the distance light travels in one year — about 9.46 trillion km."},
+      {question:"How many planets are in our solar system?",options:["7","8","9","10"],correct:1,fact:"Since Pluto was reclassified in 2006, our solar system officially has 8 planets."},
+    ]
+  },
+  language: {
+    label:"Language", icon:"📚", color:"#ffcc44", desc:"Words, grammar, literature",
+    words:[
+      {word:"SIMILE",  hint:"Comparison using 'like' or 'as'",         diff:"easy"},
+      {word:"SYNTAX",  hint:"Rules for sentence structure",            diff:"easy"},
+      {word:"SONNET",  hint:"14-line poem with a specific rhyme",      diff:"easy"},
+      {word:"METAPHOR",hint:"Saying one thing is another thing",       diff:"medium"},
+      {word:"DIALECT", hint:"Regional variety of a language",          diff:"medium"},
+      {word:"ALLEGORY",hint:"Story with a hidden moral meaning",       diff:"medium"},
+      {word:"PROLOGUE",hint:"Introductory section of a book or play",  diff:"medium"},
+      {word:"EUPHEMISM",hint:"Mild word replacing a harsh one",        diff:"hard"},
+      {word:"OXYMORON",hint:"Contradiction in terms, e.g. deafening silence",diff:"hard"},
+    ],
+    trivia:[
+      {question:"What is a word that means the opposite of another?",options:["Synonym","Homonym","Antonym","Acronym"],correct:2,fact:"An antonym is a word opposite in meaning — e.g. 'hot' is an antonym of 'cold'."},
+      {question:"What is a haiku?",options:["A Japanese tea ceremony","A 14-line poem","A 5-7-5 syllable poem","An epic narrative"],correct:2,fact:"Haiku is a form of Japanese poetry with 3 lines: 5 syllables, 7 syllables, 5 syllables."},
+      {question:"Who wrote 'Romeo and Juliet'?",options:["Charles Dickens","Jane Austen","William Shakespeare","Geoffrey Chaucer"],correct:2,fact:"Shakespeare wrote Romeo and Juliet around 1594–1596, one of his most famous tragedies."},
+      {question:"What does 'omnivore' mean?",options:["Eats only plants","Eats only meat","Eats both plants and meat","Eats nothing"],correct:2,fact:"Omni means 'all' and vorare means 'to devour' in Latin — omnivores eat both plants and animals."},
+      {question:"What is a palindrome?",options:["A word that rhymes","A word read the same forwards and backwards","A borrowed word","A word with silent letters"],correct:1,fact:"Palindromes read the same forwards and backwards — e.g. 'racecar', 'level', 'madam'."},
+      {question:"What literary device repeats initial consonant sounds?",options:["Assonance","Alliteration","Metaphor","Irony"],correct:1,fact:"Alliteration repeats consonant sounds at the start of words — e.g. 'Peter Piper picked'."},
+    ]
+  },
+};
+
+// ═══════════════════════════════════════════════════════════
+// SOUND ENGINE
+// ═══════════════════════════════════════════════════════════
+const AudioCtx=window.AudioContext||window.webkitAudioContext;
+let audioCtx=null,muted=false;
+function getCtx(){if(!audioCtx)audioCtx=new AudioCtx();if(audioCtx.state==='suspended')audioCtx.resume();return audioCtx;}
+function toggleMute(){muted=!muted;document.getElementById('muteBtn').textContent=muted?'🔇':'🔊';}
+function playTone({freq=440,type='sine',vol=0.3,attack=0.01,decay=0.1,sustain=0.6,release=0.2,duration=0.4}={}){
+  if(muted)return;const ctx=getCtx();const o=ctx.createOscillator();const g=ctx.createGain();
+  o.connect(g);g.connect(ctx.destination);o.type=type;o.frequency.setValueAtTime(freq,ctx.currentTime);
+  g.gain.setValueAtTime(0,ctx.currentTime);g.gain.linearRampToValueAtTime(vol,ctx.currentTime+attack);
+  g.gain.linearRampToValueAtTime(vol*sustain,ctx.currentTime+attack+decay);
+  g.gain.linearRampToValueAtTime(0,ctx.currentTime+duration+release);
+  o.start(ctx.currentTime);o.stop(ctx.currentTime+duration+release+0.05);
+}
+function sfxTileClick(){playTone({freq:880,type:'sine',vol:0.18,attack:0.005,decay:0.05,sustain:0.2,release:0.08,duration:0.08});}
+function sfxTileRemove(){playTone({freq:520,type:'sine',vol:0.12,attack:0.005,decay:0.04,sustain:0.1,release:0.06,duration:0.07});}
+function sfxWordCorrect(){if(muted)return;[[523,0],[659,100],[784,200]].forEach(([f,d])=>setTimeout(()=>playTone({freq:f,type:'triangle',vol:0.28,attack:0.01,decay:0.08,sustain:0.5,release:0.15,duration:0.25}),d));}
+function sfxWordWrong(){playTone({freq:220,type:'sawtooth',vol:0.2,attack:0.01,decay:0.05,sustain:0.4,release:0.2,duration:0.3});setTimeout(()=>playTone({freq:180,type:'sawtooth',vol:0.15,attack:0.01,decay:0.05,sustain:0.3,release:0.2,duration:0.25}),150);}
+function sfxTriviaOpen(){if(muted)return;const ctx=getCtx();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.setValueAtTime(300,ctx.currentTime);o.frequency.exponentialRampToValueAtTime(900,ctx.currentTime+0.25);g.gain.setValueAtTime(0.22,ctx.currentTime);g.gain.linearRampToValueAtTime(0,ctx.currentTime+0.3);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.32);}
+function sfxTriviaCorrect(){if(muted)return;[[523,0],[659,80],[784,160],[1047,260]].forEach(([f,d])=>setTimeout(()=>playTone({freq:f,type:'sine',vol:0.25,attack:0.01,decay:0.06,sustain:0.5,release:0.2,duration:0.35}),d));}
+function sfxTriviaWrong(){if(muted)return;const ctx=getCtx();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sawtooth';o.frequency.setValueAtTime(350,ctx.currentTime);o.frequency.linearRampToValueAtTime(200,ctx.currentTime+0.5);g.gain.setValueAtTime(0.18,ctx.currentTime);g.gain.linearRampToValueAtTime(0,ctx.currentTime+0.55);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.6);}
+function sfxTimerTick(){playTone({freq:1200,type:'square',vol:0.07,attack:0.005,decay:0.03,sustain:0.1,release:0.04,duration:0.06});}
+function sfxTimerUrgent(){playTone({freq:900,type:'square',vol:0.13,attack:0.005,decay:0.04,sustain:0.15,release:0.06,duration:0.08});}
+function sfxTimesUp(){playTone({freq:160,type:'sawtooth',vol:0.28,attack:0.01,decay:0.1,sustain:0.6,release:0.3,duration:0.5});}
+function sfxScoreBank(){if(muted)return;[[1200,0],[1500,100]].forEach(([f,d])=>setTimeout(()=>playTone({freq:f,type:'sine',vol:0.22,attack:0.005,decay:0.05,sustain:0.3,release:0.25,duration:0.3}),d));}
+function sfxSkip(){playTone({freq:400,type:'triangle',vol:0.12,attack:0.01,decay:0.05,sustain:0.2,release:0.1,duration:0.15});}
+function sfxCatSelect(){playTone({freq:700,type:'sine',vol:0.16,attack:0.01,decay:0.05,sustain:0.3,release:0.12,duration:0.18});}
+function sfxCatDeselect(){playTone({freq:440,type:'sine',vol:0.1,attack:0.01,decay:0.05,sustain:0.2,release:0.1,duration:0.14});}
+function sfxGameEnd(){if(muted)return;[523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>playTone({freq:f,type:'triangle',vol:0.22,attack:0.02,decay:0.1,sustain:0.6,release:0.3,duration:0.5}),i*110));}
+function sfxNewRound(){playTone({freq:660,type:'sine',vol:0.14,attack:0.01,decay:0.06,sustain:0.3,release:0.15,duration:0.2});}
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORY SELECTION
+// ═══════════════════════════════════════════════════════════
+let selectedCats=new Set();
+let selectedDiff='easy';
+
+function buildCatGrid(){
+  const grid=document.getElementById('catGrid');
+  grid.innerHTML='';
+  Object.entries(CATEGORIES).forEach(([key,cat])=>{
+    const card=document.createElement('div');
+    card.className='cat-card';
+    card.style.setProperty('--cat-color',cat.color);
+    card.dataset.key=key;
+    card.innerHTML=`<span class="cat-icon">${cat.icon}</span><div class="cat-name">${cat.label}</div><div class="cat-desc">${cat.desc}</div><div class="cat-check">✓</div>`;
+    card.onclick=()=>toggleCat(key,card);
+    grid.appendChild(card);
+  });
+}
+
+function toggleCat(key,card){
+  if(selectedCats.has(key)){selectedCats.delete(key);card.classList.remove('selected');sfxCatDeselect();}
+  else{selectedCats.add(key);card.classList.add('selected');sfxCatSelect();}
+  updateCatUI();
+}
+
+function toggleSelectAll(){
+  const allKeys=Object.keys(CATEGORIES);
+  if(selectedCats.size===allKeys.length){
+    selectedCats.clear();document.querySelectorAll('.cat-card').forEach(c=>c.classList.remove('selected'));sfxCatDeselect();
+  }else{
+    allKeys.forEach(k=>selectedCats.add(k));document.querySelectorAll('.cat-card').forEach(c=>c.classList.add('selected'));sfxCatSelect();
+  }
+  updateCatUI();
+}
+
+function updateCatUI(){
+  const n=selectedCats.size,total=Object.keys(CATEGORIES).length;
+  const btn=document.getElementById('startBtn'),sum=document.getElementById('selectedSummary'),allBtn=document.getElementById('selectAllBtn');
+  allBtn.textContent=n===total?'Deselect all':'Select all';
+  if(n===0){sum.innerHTML='Select at least 1 category';btn.disabled=true;}
+  else{
+    const labels=[...selectedCats].map(k=>CATEGORIES[k].label).join(', ');
+    sum.innerHTML=`<span>${n}</span> selected: ${labels}`;btn.disabled=false;
+  }
+}
+
+function setDiff(diff){
+  selectedDiff=diff;
+  document.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('active',b.dataset.diff===diff));
+}
+
+// ═══════════════════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════════════════
+let gameWords=[],currentWordIndex=0,currentWord='',currentWordCat='';
+let scrambled=[],tileSelected=[];
+let score=0,streak=0,skipped=0,triviaCorrect=0,pendingPoints=0;
+let timerInterval=null,timerSeconds=20,triviaAnswered=false,triviaGavePoints=false;
+let usedTrivia={};
+const TOTAL_ROUNDS=8,BASE_POINTS=10;
+
+function startGame(){
+  if(!selectedCats.size)return;
+  let pool=[];
+  selectedCats.forEach(k=>{
+    CATEGORIES[k].words.forEach(w=>{
+      const ok=selectedDiff==='all'?true:w.diff===selectedDiff;
+      if(ok)pool.push({...w,catKey:k});
+    });
+  });
+  // fallback to all difficulties if not enough
+  if(pool.length<TOTAL_ROUNDS){
+    pool=[];selectedCats.forEach(k=>CATEGORIES[k].words.forEach(w=>pool.push({...w,catKey:k})));
+  }
+  if(!pool.length)return;
+  gameWords=shuffle(pool).slice(0,TOTAL_ROUNDS);
+  usedTrivia={};selectedCats.forEach(k=>usedTrivia[k]=[]);
+  currentWordIndex=0;score=0;streak=0;skipped=0;triviaCorrect=0;
+  showScreen('gameScreen');
+  buildActiveCatsBar();
+  updateScoreUI();
+  loadWord();
+}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('congratsScreen').classList.remove('active');
+  if(id!=='_none')document.getElementById(id).classList.add('active');
+}
+
+function showCatScreen(){
+  document.getElementById('congratsScreen').classList.remove('active');
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('catScreen').classList.add('active');
+}
+
+function buildActiveCatsBar(){
+  const bar=document.getElementById('activeCatsBar');bar.innerHTML='';
+  selectedCats.forEach(k=>{
+    const cat=CATEGORIES[k];
+    const pill=document.createElement('div');pill.className='active-cat-pill';
+    pill.style.borderColor=cat.color+'55';pill.style.color=cat.color;pill.style.background=cat.color+'12';
+    pill.textContent=cat.icon+' '+cat.label;bar.appendChild(pill);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// GAME LOGIC
+// ═══════════════════════════════════════════════════════════
+function loadWord(){
+  const rounds=Math.min(TOTAL_ROUNDS,gameWords.length);
+  if(currentWordIndex>=rounds){endGame();return;}
+  const obj=gameWords[currentWordIndex];
+  currentWord=obj.word;currentWordCat=obj.catKey;
+  scrambled=shuffle(currentWord.split(''));tileSelected=new Array(scrambled.length).fill(false);
+  if(currentWordIndex>0)sfxNewRound();
+  document.getElementById('roundBadge').textContent=`ROUND ${currentWordIndex+1} OF ${rounds}`;
+  const cat=CATEGORIES[currentWordCat];
+  const tag=document.getElementById('wordCatTag');
+  tag.textContent=cat.icon+' '+cat.label;tag.style.borderColor=cat.color+'66';tag.style.color=cat.color;
+  document.getElementById('hintText').textContent=`💡 ${obj.hint}`;
+  document.getElementById('progressFill').style.width=`${(currentWordIndex/rounds)*100}%`;
+  document.getElementById('wordVal').innerHTML=`${currentWordIndex+1}<span style="font-size:0.85rem;font-weight:400">/${rounds}</span>`;
+  setStatus('','');renderTiles();renderAnswerSlots();
+}
+
+function renderTiles(){
+  const c=document.getElementById('scrambledDisplay');c.innerHTML='';
+  scrambled.forEach((l,i)=>{const t=document.createElement('div');t.className='letter-tile';t.textContent=l;t.dataset.index=i;t.onclick=()=>selectTile(i);c.appendChild(t);});
+}
+function renderAnswerSlots(){
+  const c=document.getElementById('answerRow');c.innerHTML='';
+  for(let i=0;i<currentWord.length;i++){const s=document.createElement('div');s.className='answer-slot';s.dataset.slot=i;s.onclick=()=>removeSlot(i);c.appendChild(s);}
+}
+function selectTile(i){
+  if(tileSelected[i])return;
+  const empty=[...document.querySelectorAll('.answer-slot')].find(s=>!s.textContent);
+  if(!empty)return;
+  tileSelected[i]=true;sfxTileClick();
+  const t=document.querySelector(`.letter-tile[data-index="${i}"]`);t.classList.add('used');
+  empty.textContent=scrambled[i];empty.dataset.tileIndex=i;
+}
+function removeSlot(si){
+  const s=document.querySelector(`.answer-slot[data-slot="${si}"]`);if(!s.textContent)return;
+  const ti=parseInt(s.dataset.tileIndex);tileSelected[ti]=false;sfxTileRemove();
+  document.querySelector(`.letter-tile[data-index="${ti}"]`).classList.remove('used');
+  s.textContent='';delete s.dataset.tileIndex;
+}
+function clearAnswer(){
+  document.querySelectorAll('.answer-slot').forEach(s=>{if(s.textContent){const ti=parseInt(s.dataset.tileIndex);tileSelected[ti]=false;const t=document.querySelector(`.letter-tile[data-index="${ti}"]`);if(t)t.classList.remove('used');s.textContent='';delete s.dataset.tileIndex;}});
+}
+function getAnswer(){return[...document.querySelectorAll('.answer-slot')].map(s=>s.textContent).join('');}
+function checkAnswer(){
+  const ans=getAnswer();
+  if(ans.length<currentWord.length){setStatus('Fill in all the letters first!','bad');shakeTiles();return;}
+  if(ans.toUpperCase()===currentWord){
+    sfxWordCorrect();document.querySelectorAll('.answer-slot').forEach(s=>s.classList.add('correct-flash'));
+    setStatus('Correct! Now answer the knowledge gate... 🧠','good');
+    setTimeout(()=>{document.querySelectorAll('.answer-slot').forEach(s=>s.classList.remove('correct-flash'));openTrivia();},600);
+  }else{sfxWordWrong();setStatus('Not quite — try rearranging!','bad');shakeTiles();}
+}
+function shakeTiles(){document.querySelectorAll('.letter-tile:not(.used)').forEach(t=>{t.classList.add('shake');t.addEventListener('animationend',()=>t.classList.remove('shake'),{once:true});});}
+function skipWord(){sfxSkip();skipped++;streak=0;updateScoreUI();currentWordIndex++;loadWord();}
+function setStatus(msg,type){const el=document.getElementById('statusMsg');el.textContent=msg;el.className='status-msg'+(type?` ${type}`:'');}
+
+// ── TRIVIA — matched to word's category ──
+function openTrivia(){
+  const k=currentWordCat,pool=CATEGORIES[k].trivia,used=usedTrivia[k]||[];
+  const avail=pool.filter((_,i)=>!used.includes(i));
+  const src=avail.length?avail:pool;
+  const t=src[Math.floor(Math.random()*src.length)];
+  const idx=pool.indexOf(t);
+  if(!usedTrivia[k])usedTrivia[k]=[];usedTrivia[k].push(idx);
+  triviaAnswered=false;triviaGavePoints=false;
+  const cat=CATEGORIES[k];
+  const ctag=document.getElementById('triviaCategory');
+  ctag.textContent=cat.icon+' '+cat.label;ctag.style.background=cat.color+'18';ctag.style.color=cat.color;
+  document.getElementById('triviaQuestion').textContent=t.question;
+  document.getElementById('triviaFeedback').className='trivia-feedback';
+  document.getElementById('triviaFeedback').textContent='';
+  document.getElementById('triviaBtn').className='btn btn-primary trivia-continue';
+  const opts=document.getElementById('triviaOptions');opts.innerHTML='';
+  t.options.forEach((o,i)=>{const b=document.createElement('button');b.className='trivia-option';b.textContent=o;b.onclick=()=>answerTrivia(i,t,b);opts.appendChild(b);});
+  document.getElementById('triviaOverlay').classList.add('active');
+  sfxTriviaOpen();startTimer(t);
+}
+
+function answerTrivia(index,trivia,clickedBtn){
+  if(triviaAnswered)return;triviaAnswered=true;clearInterval(timerInterval);
+  const allOpts=document.querySelectorAll('.trivia-option');allOpts.forEach(b=>b.classList.add('locked'));
+  const fb=document.getElementById('triviaFeedback');
+  if(index===trivia.correct){
+    clickedBtn.classList.add('selected-correct');sfxTriviaCorrect();
+    triviaCorrect++;triviaGavePoints=true;pendingPoints=BASE_POINTS+(streak*2);
+    fb.textContent=`✅ Correct! ${trivia.fact}`;fb.className='trivia-feedback show correct-fb';
+  }else{
+    clickedBtn.classList.add('selected-wrong');sfxTriviaWrong();
+    allOpts[trivia.correct].classList.add('reveal-correct');triviaGavePoints=false;streak=0;
+    fb.textContent=`❌ Not quite. ${trivia.fact}`;fb.className='trivia-feedback show wrong-fb';
+  }
+  document.getElementById('triviaBtn').className='btn btn-primary trivia-continue show';stopTimer();
+}
+
+function startTimer(trivia){
+  timerSeconds=20;updateTimerUI(20,20);
+  timerInterval=setInterval(()=>{
+    timerSeconds--;updateTimerUI(timerSeconds,20);
+    if(timerSeconds<=5&&timerSeconds>0)sfxTimerUrgent();else if(timerSeconds>5)sfxTimerTick();
+    if(timerSeconds<=0){
+      clearInterval(timerInterval);sfxTimesUp();
+      if(!triviaAnswered){
+        triviaAnswered=true;triviaGavePoints=false;streak=0;
+        const fb=document.getElementById('triviaFeedback');
+        const ao=document.querySelectorAll('.trivia-option');ao.forEach(b=>b.classList.add('locked'));
+        ao[trivia.correct].classList.add('reveal-correct');
+        fb.textContent=`⏱ Time's up! ${trivia.fact}`;fb.className='trivia-feedback show wrong-fb';
+        document.getElementById('triviaBtn').className='btn btn-primary trivia-continue show';
+      }
+    }
+  },1000);
+}
+function stopTimer(){clearInterval(timerInterval);}
+function updateTimerUI(val,max){
+  const offset=100-(val/max)*100;
+  const fill=document.getElementById('timerFill');fill.style.strokeDashoffset=offset;
+  fill.style.stroke=val<=5?'var(--wrong)':val<=10?'var(--accent2)':'var(--accent)';
+  document.getElementById('timerText').textContent=val;
+}
+function closeTriviaAndScore(){
+  document.getElementById('triviaOverlay').classList.remove('active');
+  if(triviaGavePoints){score+=pendingPoints;streak++;sfxScoreBank();popScore();}
+  updateScoreUI();currentWordIndex++;setTimeout(loadWord,300);
+}
+function popScore(){const el=document.getElementById('scoreVal');el.classList.add('pop');setTimeout(()=>el.classList.remove('pop'),400);}
+function updateScoreUI(){document.getElementById('scoreVal').textContent=score;document.getElementById('streakVal').textContent=streak;}
+
+function endGame(){
+  sfxGameEnd();
+  const rounds=Math.min(TOTAL_ROUNDS,gameWords.length);
+  document.getElementById('progressFill').style.width='100%';
+  showScreen('_none');
+  const cs=document.getElementById('congratsScreen');cs.classList.add('active');
+  document.getElementById('finalScore').textContent=`${score} pts`;
+  document.getElementById('finalStats').textContent=`${triviaCorrect} / ${rounds-skipped} trivia correct · ${skipped} skipped · Best streak: ${streak}`;
+}
+function restartGame(){document.getElementById('congratsScreen').classList.remove('active');startGame();}
+
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!document.getElementById('triviaOverlay').classList.contains('active')&&document.getElementById('gameScreen').classList.contains('active'))checkAnswer();
+});
+
+// BOOT
+buildCatGrid();
+updateCatUI();
+</script>
+</body>
+</html>
